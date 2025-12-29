@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>法律条文查询工具</title>
+    <!-- 引入 Tailwind CSS 用于快速样式设计 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4 md:p-8">
+
+<div class="bg-white rounded-lg shadow-md w-full max-w-4xl overflow-hidden">
+    <div class="p-6 md:p-8">
+        <h1 class="text-2xl md:text-3xl font-bold text-center text-gray-800 mb-6">法律条文查询工具</h1>
+
+        <div class="flex flex-col md:flex-row gap-4 mb-6">
+            <!-- 文件选择 -->
+            <div class="flex-1">
+                <label for="fileInput" class="block text-sm font-medium text-gray-700 mb-1">选择法律文件 (.txt)</label>
+                <input type="file" id="fileInput" accept=".txt" class="block w-full text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded file:border-0
+                        file:text-sm file:font-medium
+                        file:bg-blue-50 file:text-blue-700
+                        hover:file:bg-blue-100
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            </div>
+
+            <!-- 条款号输入 -->
+            <div class="flex-1">
+                <label for="articleNumber" class="block text-sm font-medium text-gray-700 mb-1">输入条款号 (例如: 69)</label>
+                <input type="text" id="articleNumber" placeholder="请输入要查询的条款号"
+                       class="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md p-2 border">
+            </div>
+
+            <!-- 查询按钮 -->
+            <div class="flex items-end">
+                <button id="searchBtn" class="w-full md:w-auto inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    查询
+                </button>
+            </div>
+        </div>
+
+        <!-- 结果显示区域 -->
+        <div class="mt-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-3">查询结果</h2>
+            <div id="resultArea" class="border border-gray-300 rounded-md p-4 min-h-[200px] bg-gray-50 text-gray-700 whitespace-pre-line overflow-auto">
+                请选择文件并输入条款号后点击查询。
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer class="mt-6 text-center text-sm text-gray-500">
+    <p>豆包编程助手 © 2025</p>
+</footer>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const fileInput = document.getElementById('fileInput');
+        const articleNumberInput = document.getElementById('articleNumber');
+        const searchBtn = document.getElementById('searchBtn');
+        const resultArea = document.getElementById('resultArea');
+
+        let fullText = ''; // 用于存储完整的文件内容
+
+        // 1. 监听文件选择事件
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                fullText = '';
+                resultArea.textContent = '请选择一个有效的.txt文件。';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                fullText = e.target.result;
+                resultArea.textContent = `文件 "${file.name}" 已加载成功，请输入条款号进行查询。`;
+            };
+            reader.readAsText(file);
+        });
+
+        // 2. 监听查询按钮点击事件
+        searchBtn.addEventListener('click', () => {
+            if (!fullText) {
+                resultArea.textContent = '错误：请先选择并加载一个法律文件。';
+                return;
+            }
+
+            const articleNum = articleNumberInput.value.trim();
+            if (!articleNum || isNaN(articleNum)) {
+                resultArea.textContent = '错误：请输入一个有效的条款号（数字）。';
+                return;
+            }
+
+            // 调用核心查询函数
+            const result = findArticleContent(fullText, articleNum);
+            resultArea.textContent = result;
+        });
+
+        /**
+         * 核心查询函数：根据条款号在全文中查找并提取内容
+         * @param {string} text - 完整的法律文本
+         * @param {string} numberStr - 要查找的条款号（阿拉伯数字字符串）
+         * @returns {string} - 找到的条款内容或提示信息
+         */
+        function findArticleContent(text, numberStr) {
+            // **关键修改：将阿拉伯数字转换为中文数字**
+            const chineseNumber = convertToChineseNumber(parseInt(numberStr, 10));
+            if (!chineseNumber) {
+                return "输入的数字超出转换范围。";
+            }
+
+            // 使用转换后的中文数字构造正则表达式
+            const startRegex = new RegExp(`第${chineseNumber}条[\u3000 ]?`);
+
+            const startMatch = text.match(startRegex);
+
+            if (!startMatch) {
+                return `未找到第 ${numberStr} 条 (中文: ${chineseNumber}条)。`;
+            }
+
+            const startIndex = startMatch.index;
+
+            // 查找下一个条款的开始位置
+            const nextArticleRegex = /第[\u4e00-\u9fa5]+条/; // 匹配 "第中文数字条"
+            const remainingText = text.slice(startIndex + startMatch[0].length);
+            const nextMatch = remainingText.match(nextArticleRegex);
+
+            let endIndex;
+            if (nextMatch) {
+                endIndex = startIndex + startMatch[0].length + nextMatch.index;
+            } else {
+                endIndex = text.length;
+            }
+
+            const articleContent = text.slice(startIndex, endIndex);
+
+            return articleContent;
+        }
+
+        /**
+         * 将阿拉伯数字转换为中文数字
+         * @param {number} num - 要转换的非负整数
+         * @returns {string|null} - 转换后的中文数字字符串，或在输入无效时返回null
+         */
+        function convertToChineseNumber(num) {
+            if (isNaN(num) || num < 0 || num > 9999) {
+                return null; // 限制在万以内
+            }
+            const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+            const units = ['', '十', '百', '千'];
+            let result = '';
+            let strNum = num.toString();
+            let length = strNum.length;
+
+            for (let i = 0; i < length; i++) {
+                let d = parseInt(strNum[i]);
+                let pos = length - 1 - i;
+
+                if (d === 0) {
+                    // 处理连续的零，只保留一个
+                    if (result && result.charAt(result.length - 1) !== '零') {
+                        result += '零';
+                    }
+                } else {
+                    result += digits[d] + units[pos];
+                }
+            }
+
+            // 处理特殊情况 "一十" -> "十"
+            if (result.startsWith('一十')) {
+                result = result.substring(1);
+            }
+
+            // 移除末尾多余的零
+            if (result.endsWith('零')) {
+                result = result.substring(0, result.length - 1);
+            }
+
+            // 如果输入是0，返回"零"
+            if (result === '') {
+                result = '零';
+            }
+
+            return result;
+        }
+    });
+</script>
+
+</body>
+</html>
